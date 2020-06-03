@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="initial-scale=1.0, user-scalable=no, width=device-width"
+    />
+    <style>
+      html,
+      body,
+      #map {
+        width: 100%;
+        height: 100%;
+      }
+
+      .container {
+        height: 100%;
+        display: flex;
+      }
+
+      .aside {
+        width: 340px;
+        overflow: auto;
+        padding: 16px;
+        border-right: 1px solid #ddd;
+      }
+
+      .table {
+        border-top: 1px solid #ddd;
+        margin-top: 20px;
+      }
+
+      .link-type + .link-type {
+        margin-left: 10px;
+      }
+
+      .main {
+        flex: 1;
+        position: relative;
+      }
+
+      .input-card .btn {
+        margin-right: 1.2rem;
+        width: 9rem;
+      }
+
+      .input-card .btn:last-child {
+        margin-right: 0;
+      }
+    </style>
+    <title>电子围栏设置</title>
+    <link
+      rel="stylesheet"
+      href="https://a.amap.com/jsapi_demos/static/demo-center/css/demo-center.css"
+    />
+    <script src="https://webapi.amap.com/maps?v=1.4.15&key=43710d5dab1b6156ae1bb9c89f9555ba&plugin=AMap.MouseTool"></script>
+    <script src="https://a.amap.com/jsapi_demos/static/demo-center/js/demoutils.js"></script>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/element-ui@2.13.1/lib/theme-chalk/index.css"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/vue"></script>
+    <script src="https://unpkg.com/element-ui@2.13.1/lib/index.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.7.3/localforage.min.js"></script>
+    <script src="http://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ramda/0.26.0/ramda.min.js"></script>
+  </head>
+  <body style="background-color: #fff;">
+    <div class="container">
+      <div id="app" class="aside">
+        <div
+          style="
+            background-color: #ecf5ff;
+            display: inline-block;
+            padding: 0 10px;
+            line-height: 24px;
+            font-size: 12px;
+            color: #409eff;
+            border-radius: 2px;
+            margin-bottom: 10px;
+          "
+        >
+          电子围栏设置
+        </div>
+        <el-row style="display: flex;">
+          <el-input v-model="input" placeholder="搜索" style="width: 260px;">
+          </el-input>
+          <el-button
+            @click="markerName='';markerNameDialogVisible=true"
+            type="primary"
+            icon="el-icon-add"
+            size="mini"
+            style="margin-left: 20px;"
+            >新增</el-button
+          >
+        </el-row>
+        <el-table
+          :data="tableData.filter(m=>m.name.includes(input.trim()))"
+          class="table"
+        >
+          <el-table-column prop="name" label="围栏名称">
+            <template v-slot="{row}" @click="nameClickHandler"
+              ><el-link
+                :underline="false"
+                @click="nameClickHandler(row)"
+                style="font-weight: 300;"
+                >{{row.name}}
+              </el-link></template
+            >
+          </el-table-column>
+          <el-table-column label="操作" width="84" align="center">
+            <template v-slot="{row}">
+              <el-link
+                type="primary"
+                style="font-size: smaller;"
+                :underline="false"
+                class="link-type"
+                @click="editingMarker=row;editingMarkerName=row.name;markerNameEditDialogVisible=true"
+                >编辑
+              </el-link>
+              <el-link
+                type="primary"
+                style="font-size: smaller;"
+                :underline="false"
+                class="link-type"
+                @click="delMarker(row.id)"
+                >删除
+              </el-link>
+            </template>
+          </el-table-column>
+        </el-table>
+        <el-dialog
+          title="请输入围栏名称"
+          :visible.sync="markerNameDialogVisible"
+          width="300px"
+        >
+          <el-row>
+            <el-input
+              v-model="markerName"
+              placeholder="请输入围栏名称"
+              style="width: 260px;"
+            >
+              ></el-input
+            ></el-row
+          >
+          <span slot="footer" class="dialog-footer">
+            <el-button @click="markerNameDialogVisible = false" size="small"
+              >取 消</el-button
+            >
+            <el-button
+              style="margin-top: 12px;"
+              @click="checkMarkerNameAndNext"
+              size="small"
+              type="primary"
+              >下一步</el-button
+            >
+          </span>
+        </el-dialog>
+        <el-dialog
+          title="请输入围栏名称"
+          :visible.sync="markerNameEditDialogVisible"
+          width="300px"
+        >
+          <el-row>
+            <el-input
+              v-model="editingMarkerName"
+              placeholder="请输入围栏名称"
+              style="width: 260px;"
+            >
+              ></el-input
+            ></el-row
+          >
+          <span slot="footer" class="dialog-footer">
+            <el-button @click="markerNameEditDialogVisible = false" size="small"
+              >取 消</el-button
+            >
+            <el-button
+              style="margin-top: 12px;"
+              @click="markerNameEditSave"
+              size="small"
+              type="primary"
+              >保存</el-button
+            >
+          </span>
+        </el-dialog>
+        <el-dialog
+          title="请选择围栏形状"
+          :visible.sync="shapeDialogVisible"
+          width="300px"
+        >
+          <el-row>
+            <el-button
+              @click="drawPolygon"
+              type="primary"
+              plain
+              style="margin-bottom: 5px; width: 100%;"
+              >多边形</el-button
+            ></el-row
+          >
+          <el-row>
+            <el-button
+              @click="drawRectangle"
+              type="primary"
+              plain
+              style="margin-bottom: 5px; width: 100%;"
+              >矩形</el-button
+            ></el-row
+          >
+          <el-row>
+            <el-button
+              @click="drawCircle"
+              type="primary"
+              plain
+              style="margin-bottom: 5px; width: 100%;"
+              >圆形</el-button
+            ></el-row
+          >
+        </el-dialog>
+      </div>
+      <div class="main">
+        <div id="map"></div>
+        <div class="input-card">
+          <h4>轨迹回放控制</h4>
+          <div class="input-item">
+            <input
+              type="button"
+              class="btn"
+              value="开始动画"
+              id="start"
+              onclick="startAnimation()"
+            />
+            <input
+              type="button"
+              class="btn"
+              value="停止动画"
+              id="stop"
+              onclick="stopAnimation()"
+            />
+          </div>
+          <div class="input-item">
+            <input
+              type="button"
+              class="btn"
+              value="暂停动画"
+              id="pause"
+              onclick="pauseAnimation()"
+            />
+            <input
+              type="button"
+              class="btn"
+              value="继续动画"
+              id="resume"
+              onclick="resumeAnimation()"
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="text/javascript">
+      let app
+      let map = new AMap.Map('map', {
+        center: [116.397428, 39.90923],
+        zoom: 17,
+        mapStyle: 'amap://styles/normal',
+      })
+
+      const option = {
+        strokeColor: '#1981FF',
+        strokeOpacity: 1,
+        strokeWeight: 6,
+        strokeOpacity: 0.2,
+        fillColor: '#1791fc',
+        fillOpacity: 0.4,
+        strokeStyle: 'solid',
+      }
+      const checkedOption = {
+        ...option,
+        strokeColor: '#1791fc',
+        fillColor: '#79b1f5',
+      }
+
+      function drawPolygon() {
+        mouseTool.polygon(option)
+      }
+
+      function drawRectangle() {
+        mouseTool.rectangle(option)
+      }
+
+      function drawCircle() {
+        mouseTool.circle(option)
+      }
+
+      let currentMarker
+      let mouseTool = new AMap.MouseTool(map)
+      mouseTool.on('draw', function (event) {
+        console.log(event)
+        mouseTool.close()
+        let marker
+        if (event.obj.CLASS_NAME === 'AMap.Circle') {
+          marker = {
+            type: 'circle',
+            radius: event.obj.getRadius(),
+            lng: event.obj.getCenter().lng,
+            lat: event.obj.getCenter().lat,
+          }
+        } else {
+          marker = {
+            type: 'polygon',
+            path: event.obj.getPath().map((m) => {
+              return { lng: m.lng, lat: m.lat }
+            }),
+          }
+        }
+        console.log(marker)
+        app.setMarker(marker)
+      })
+
+      let contextMenu = new AMap.ContextMenu()
+      contextMenu.addItem(
+        '删除',
+        function (e) {
+          console.log(e)
+          console.log(currentMarker)
+          app.delMarker(currentMarker.id)
+        },
+        0,
+      )
+
+      function setBlink(obj, showHide = true) {
+        obj.setOptions(showHide ? option : checkedOption)
+        setTimeout(() => {
+          setBlink(obj, !showHide)
+        }, 800)
+      }
+
+      function initMarker(markers) {
+        map
+          .getAllOverlays()
+          .filter((m) => m.type == 'fence')
+          .forEach((m) => {
+            map.remove(m)
+          })
+        markers &&
+          markers.forEach((m) => {
+            const marker = JSON.parse(m.pts)
+            let obj
+            if (marker.type === 'circle') {
+              obj = new AMap.Circle({
+                center: new AMap.LngLat(marker.lng, marker.lat), // 圆心位置
+                radius: marker.radius, // 圆半径
+                ...option,
+              })
+            } else {
+              var path = marker.path.map(
+                (pathItem) => new AMap.LngLat(pathItem.lng, pathItem.lat),
+              )
+              obj = new AMap.Polygon({
+                path: path,
+                ...option,
+              })
+            }
+            obj.id = m.id
+            obj.type = 'fence'
+            obj.on('rightclick', function (e) {
+              currentMarker = e.target
+              contextMenu.open(map, e.lnglat)
+            })
+            obj.on('mouseover', (e) => {
+              console.log('mouseover', e)
+              e.target.setOptions(checkedOption)
+            })
+            obj.on('mouseout', (e) => {
+              console.log('mouseout', e)
+              e.target.setOptions(option)
+            })
+            setBlink(obj)
+            map.add(obj)
+          })
+      }
+
+      {
+        var car,
+          lineArr = [
+            [116.478935, 39.997761],
+            [116.478939, 39.997825],
+            [116.478912, 39.998549],
+            [116.478912, 39.998549],
+            [116.478998, 39.998555],
+            [116.478998, 39.998555],
+            [116.479282, 39.99856],
+            [116.479658, 39.998528],
+            [116.480151, 39.998453],
+            [116.480784, 39.998302],
+            [116.480784, 39.998302],
+            [116.481149, 39.998184],
+            [116.481573, 39.997997],
+            [116.481863, 39.997846],
+            [116.482072, 39.997718],
+            [116.482362, 39.997718],
+            [116.483633, 39.998935],
+            [116.48367, 39.998968],
+            [116.484648, 39.999861],
+          ]
+        car = new AMap.Marker({
+          map: map,
+          position: [116.478935, 39.997761],
+          icon: 'https://webapi.amap.com/images/car.png',
+          offset: new AMap.Pixel(-26, -13),
+          autoRotation: true,
+          angle: -90,
+        })
+
+        // 绘制轨迹
+        var polyline = new AMap.Polyline({
+          map: map,
+          path: lineArr,
+          showDir: true,
+          strokeColor: '#28F', //线颜色
+          strokeWeight: 6, //线宽
+        })
+
+        var passedPolyline = new AMap.Polyline({
+          map: map,
+          strokeColor: '#AF5', //线颜色
+          strokeWeight: 6, //线宽
+        })
+
+        let carInFenceCache
+        car.on('moving', function (e) {
+          // console.log(e, car.getPosition());
+          passedPolyline.setPath(e.passedPath)
+          let position = car.getPosition()
+          let isCarInFence = fenceMonitoring(position.lng, position.lat)
+          if (isCarInFence && isCarInFence != carInFenceCache)
+            app.$message.success('进 ' + isCarInFence)
+          if (carInFenceCache && carInFenceCache != isCarInFence)
+            app.$message.info('出 ' + carInFenceCache)
+          carInFenceCache = isCarInFence
+        })
+        car.on('moveend', function (e) {
+          console.log(
+            `${app.tableData.length}个围栏, ${pointsCount}个坐标点, 计算用时 ${
+              allCalcTime / 1000
+            } 秒`,
+          )
+        })
+
+        map.setFitView()
+
+        let pointsCount, allCalcTime
+        function startAnimation() {
+          pointsCount = 0
+          allCalcTime = 0
+          car.moveAlong(lineArr, 200)
+        }
+
+        function pauseAnimation() {
+          car.pauseMove()
+        }
+
+        function resumeAnimation() {
+          car.resumeMove()
+        }
+
+        function stopAnimation() {
+          car.stopMove()
+        }
+
+        function fenceMonitoring(lng, lat) {
+          let starttime = +new Date()
+          try {
+            for (let fence of app.tableData) {
+              // console.log(lng, lat, fence);
+              let pts = JSON.parse(fence.pts)
+              // console.log(pts);
+              let isInFence
+              switch (pts.type) {
+                case 'circle':
+                  isInFence = isInCircle(pts.lng, pts.lat, lng, lat, pts.radius)
+                  break
+                case 'polygon':
+                  isInFence = isInPolygon(pts.path, lng, lat)
+                  break
+                default:
+                  break
+              }
+              if (isInFence) return fence.name
+            }
+          } catch (e) {
+            console.error(e)
+          }
+          pointsCount++
+          allCalcTime += +new Date() - starttime
+          return null
+        }
+
+        function isInCircle(lng1, lat1, lng2, lat2, radius) {
+          return getDistance(lng1, lat1, lng2, lat2) < radius
+          function getDistance(lng1, lat1, lng2, lat2) {
+            //基于地球半径 R = 6370996.81
+            const earthRadius = 6370996.81
+            const PI = Math.PI
+            const acos = Math.acos
+            const cos = Math.cos
+            const sin = Math.sin
+            lat1 = (lat1 * PI) / 180
+            lng1 = (lng1 * PI) / 180
+            lat2 = (lat2 * PI) / 180
+            lng2 = (lng2 * PI) / 180
+            let distance = acos(
+              cos(lat1) * cos(lat2) * cos(lng1 - lng2) + sin(lat1) * sin(lat2),
+            )
+            return Math.round(distance * earthRadius)
+          }
+        }
+
+        function isInPolygon(path, lng, lat) {
+          if (path.length < 3) return false
+          let sum = 0
+          let loopPath = [...path, path[0]]
+          for (let i = 0; i < loopPath.length - 1; i++) {
+            const lng1 = loopPath[i].lng
+            const lat1 = loopPath[i].lat
+            const lng2 = loopPath[i + 1].lng
+            const lat2 = loopPath[i + 1].lat
+            // 判断点(lng,lat)是否落在边两端点的水平线之间
+            if ((lat1 >= lat && lat2 < lat) || (lat2 >= lat && lat1 < lat)) {
+              let intersectionLng =
+                lng1 - ((lat1 - lat) * (lng1 - lng2)) / (lat1 - lat2)
+              // 取(左或右)射线
+              if (intersectionLng < lng) sum++
+            }
+          }
+          return sum % 2 != 0
+        }
+      }
+
+      map.on('complete', function () {
+        console.log('地图加载完成！')
+        app = new Vue({
+          el: '#app',
+          data() {
+            return {
+              fenceType: 'area',
+              tableData: [],
+              input: '',
+              shapeDialogVisible: false,
+              markerName: '',
+              markerNameDialogVisible: false,
+              markerNameEditDialogVisible: false,
+              editingMarker: {},
+              editingMarkerName: '',
+            }
+          },
+          async created() {
+            this.tableData = (await localforage.getItem('fences')) || []
+          },
+          methods: {
+            drawPolygon() {
+              this.tips('绘制多边形: 左键单击选点, 右键结束')
+              drawPolygon()
+            },
+            drawRectangle() {
+              this.tips('绘制矩形: 按下左键拖动鼠标, 松开鼠标结束')
+              drawRectangle()
+            },
+            drawCircle() {
+              this.tips('绘制圆形: 按下左键拖动鼠标, 松开鼠标结束')
+              drawCircle()
+            },
+            tips(msg) {
+              this.shapeDialogVisible = false
+              this.$message({
+                message: msg,
+                duration: 5000,
+              })
+            },
+            checkMarkerNameAndNext() {
+              if (!this.markerName)
+                return this.$message.warning('请输入围栏名称')
+              this.markerNameDialogVisible = false
+              this.shapeDialogVisible = true
+            },
+            async setMarker(marker) {
+              try {
+                this.tableData.push({
+                  id: +new Date(),
+                  name: this.markerName,
+                  type: this.fenceType,
+                  creator: '',
+                  pts: JSON.stringify(marker),
+                })
+                this.$message.success('围栏设置成功')
+              } catch (e) {
+                console.error(e)
+                this.$message.error('围栏设置失败')
+              }
+            },
+            async markerNameEditSave(obj) {
+              this.markerNameEditDialogVisible = true
+              try {
+                this.editingMarker.name = this.editingMarkerName
+                this.editingMarker = {}
+                this.markerNameEditDialogVisible = false
+                this.tableData = [...this.tableData]
+                this.$message.success('操作成功')
+              } catch (e) {
+                console.error(e)
+                this.error.success('操作失败')
+              }
+            },
+            async delMarker(id) {
+              try {
+                this.tableData = this.tableData.filter((m) => m.id != id)
+              } catch (e) {
+                console.error(e)
+              }
+            },
+            nameClickHandler(row) {
+              try {
+                const pts = JSON.parse(row.pts)
+                console.log(pts)
+                if (pts.type == 'circle') map.setCenter([pts.lng, pts.lat])
+                else {
+                  let lng =
+                    (Math.max(...pts.path.map((m) => m.lng)) +
+                      Math.min(...pts.path.map((m) => m.lng))) /
+                    2
+                  let lat =
+                    (Math.max(...pts.path.map((m) => m.lat)) +
+                      Math.min(...pts.path.map((m) => m.lat))) /
+                    2
+                  map.setCenter([lng, lat])
+                }
+              } catch (e) {
+                console.error(e)
+              }
+            },
+          },
+          watch: {
+            async tableData() {
+              await localforage.setItem('fences', this.tableData)
+              initMarker(this.tableData)
+            },
+          },
+          computed: {},
+        })
+      })
+    </script>
+  </body>
+</html>
